@@ -20,7 +20,6 @@ const pbtx_pb = require('./pbtx_pb');
 const EC = require('elliptic').ec;
 const { PrivateKey } = require('eosjs/dist/PrivateKey');
 const { SerialBuffer } = require('eosjs/dist/eosjs-serialize');
-const { publicKeyToLegacyString, stringToPublicKey } = require('eosjs/dist/eosjs-numeric');
 
 const defaultEc = new EC('secp256k1');
 
@@ -97,8 +96,7 @@ class PBTX {
 
             const keyNewFormat = buffer.getPublicKey();
 
-            data.keys.push({weight: keyweight.getWeight(),
-                            key: publicKeyToLegacyString(stringToPublicKey(keyNewFormat))});
+            data.keys.push({weight: keyweight.getWeight(),  key: keyNewFormat});
         });
 
         return data;
