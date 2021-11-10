@@ -19,6 +19,8 @@
 const pbtx_pb = require('./pbtx_pb');
 const EC = require('elliptic').ec;
 const { PrivateKey } = require('eosjs/dist/PrivateKey');
+const { PublicKey } = require('eosjs/dist/PublicKey');
+const { Signature } = require('eosjs/dist/Signature');
 const { SerialBuffer } = require('eosjs/dist/eosjs-serialize');
 
 const defaultEc = new EC('secp256k1');
@@ -248,7 +250,97 @@ class PBTX {
                 expireSeconds: 3600
             });
     }
+
+    static async validateTransaction(txbinary, api, contract, verbose) {
+        let tx = pbtx_pb.Transaction.deserializeBinary(txbinary);
+        let body_buf = tx.getBody();
+        let body = pbtx_pb.TransactionBody.deserializeBinary(body_buf);
+        const body_digest = defaultEc.hash().update(body_buf).digest();
+        let network_id = body.getNetworkId();
+
+        if( network_id == 0 ) { return Promise.reject(Error("network_id must not be zero")); }
+        if( body.getActor() == 0 ) { return Promise.reject(Error("actor must not be zero")); }
+
+        let signors = new Array();
+        signors.push(body.getActor());
+        if( verbose ) {
+            console.log("network_id: " + network_id);
+            console.log("actor: " + body.getActor());
+        }
+        body.getCosignorsList().forEach(acc => {
+            signors.push(acc);
+            console.log("co-signor: " + acc);
+        });
+
+        let authorities = tx.getAuthoritiesList();
+        if( authorities.length != signors.length ) {
+            return Promise.reject(Error("number of authorities is not equal to number of signors: " +
+                                        authorities.length + " vs. " + signors.length));
+        }
+
+        for( let auth_index = 0; auth_index < signors.length; auth_index++ ) {
+            let acc = signors[auth_index];
+            let auth = authorities[auth_index];
+            if( auth.getType() != pbtx_pb.KeyType['EOSIO_KEY'] ) {
+                return Promise.reject(Error("Unsupported key type in authority #" + auth_index + ": " + auth.getType()));
+            }
+
+            let signatures = auth.getSigsList();
+
+            let res = await api.rpc.get_table_rows({
+                code: contract,
+                scope: network_id,
+                table: 'actorperm',
+                lower_bound: acc,
+                limit: 1
+            });
+
+            if( res.rows.length == 0 || res.rows[0].actor != acc ) {
+                return Promise.reject(Error("Unknown actor #" + acc + " in authority #" + auth_index));
+            }
+
+            let perm = pbtx_pb.Permission.deserializeBinary(Buffer.from(res.rows[0].permission, 'hex'));
+            let keyweights = perm.getKeysList();
+
+
+            let weight_sum = 0;
+            for( let sig_index = 0; sig_index < signatures.length; sig_index++ ) {
+                let sig_buf = signatures[sig_index];
+                let signature = new Signature({
+                    type: sig_buf[0],
+                    data: sig_buf.subarray(1)
+                }, defaultEc);
+
+                for( let key_index = 0; key_index < keyweights.length; key_index++ ) {
+                    let keyweight = keyweights[key_index];
+                    let key = keyweight.getKey();
+                    let key_buf = key.getKeyBytes();
+                    let pubkey = new PublicKey({
+                        type: key_buf[0],
+                        data: key_buf.subarray(1)
+                    }, defaultEc);
+
+                    if( signature.verify(body_digest, pubkey, false) ) {
+                        if( verbose ) {
+                            console.log("Signature #" + sig_index + " in authority #" + auth_index +
+                                        " matched key: " + pubkey.toString());
+                        }
+                        weight_sum += keyweight.getWeight();
+                        break;
+                    }
+                }
+            }
+
+            if( weight_sum == 0 ) {
+                return Promise.reject(Error("Could not find a matching signature for actor " + acc));
+            }
+            else if( weight_sum < perm.getThreshold() ) {
+                return Promise.reject(Error("Insufficient signatures for actor " + acc));
+            }
+        }
+    }
 }
+
 
 
 module.exports = PBTX;
