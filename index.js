@@ -257,15 +257,39 @@ class PBTX {
         let body = pbtx_pb.TransactionBody.deserializeBinary(body_buf);
         const body_digest = defaultEc.hash().update(body_buf).digest();
         let network_id = body.getNetworkId();
+        let actor = body.getActor();
 
         if( network_id == 0 ) { return Promise.reject(Error("network_id must not be zero")); }
-        if( body.getActor() == 0 ) { return Promise.reject(Error("actor must not be zero")); }
+        if( actor == 0 ) { return Promise.reject(Error("actor must not be zero")); }
+
+        let seqres = await api.rpc.get_table_rows({
+            code: contract,
+            scope: network_id,
+            table: 'actorseq',
+            lower_bound: actor,
+            limit: 1
+        });
+
+        if( seqres.rows.length == 0 || seqres.rows[0].actor != actor ) {
+            return Promise.reject(Error("Unknown actor #" + actor));
+        }
+
+        let actorseq = seqres.rows[0];
+        if( body.getSeqnum() != actorseq.seqnum + 1 ) {
+            return Promise.reject(Error("Invalid sequence number " + body.getSeqnum() + " for actor #" + actor +
+                                        ", expected: " + (actorseq.seqnum + 1)));
+        }
+
+        if( BigInt(body.getPrevHash()) != BigInt(actorseq.prev_hash) ) {
+            return Promise.reject(Error("Invalid prev_hash " + body.getPrevHash() + " for actor #" + actor +
+                                        ", expected: " + BigInt(actorseq.prev_hash).toString()));
+        }
 
         let signors = new Array();
-        signors.push(body.getActor());
+        signors.push(actor);
         if( verbose ) {
             console.log("network_id: " + network_id);
-            console.log("actor: " + body.getActor());
+            console.log("actor: " + actor);
         }
         body.getCosignorsList().forEach(acc => {
             signors.push(acc);
