@@ -25,9 +25,36 @@ const { SerialBuffer } = require('eosjs/dist/eosjs-serialize');
 
 const defaultEc = new EC('secp256k1');
 
+class PbtxFormatError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "PbtxFormatError";
+  }
+}
+
+class PbtxUnknownAccountError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "PbtxUnknownAccountError";
+  }
+}
+
+class PbtxTxSeqError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "PbtxTxSeqError";
+  }
+}
+
+class PbtxAuthorizationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "PbtxAuthorizationError";
+  }
+}
+
 
 class PBTX {
-
     // takes permission attributes
     // returns a Permission protobuf object
     static makePermission(data) {
@@ -259,8 +286,8 @@ class PBTX {
         let network_id = body.getNetworkId();
         let actor = body.getActor();
 
-        if( network_id == 0 ) { return Promise.reject(Error("network_id must not be zero")); }
-        if( actor == 0 ) { return Promise.reject(Error("actor must not be zero")); }
+        if( network_id == 0 ) { return Promise.reject(new PbtxFormatError("network_id must not be zero")); }
+        if( actor == 0 ) { return Promise.reject(new PbtxFormatError("actor must not be zero")); }
 
         let seqres = await api.rpc.get_table_rows({
             code: contract,
@@ -271,18 +298,18 @@ class PBTX {
         });
 
         if( seqres.rows.length == 0 || seqres.rows[0].actor != actor ) {
-            return Promise.reject(Error("Unknown actor #" + actor));
+            return Promise.reject(new PbtxUnknownAccountError("Unknown actor #" + actor));
         }
 
         let actorseq = seqres.rows[0];
         if( body.getSeqnum() != actorseq.seqnum + 1 ) {
-            return Promise.reject(Error("Invalid sequence number " + body.getSeqnum() + " for actor #" + actor +
-                                        ", expected: " + (actorseq.seqnum + 1)));
+            return Promise.reject(new PbtxTxSeqError("Invalid sequence number " + body.getSeqnum() + " for actor #" + actor +
+                                                 ", expected: " + (actorseq.seqnum + 1)));
         }
 
         if( BigInt(body.getPrevHash()) != BigInt(actorseq.prev_hash) ) {
-            return Promise.reject(Error("Invalid prev_hash " + body.getPrevHash() + " for actor #" + actor +
-                                        ", expected: " + BigInt(actorseq.prev_hash).toString()));
+            return Promise.reject(new PbtxTxSeqError("Invalid prev_hash " + body.getPrevHash() + " for actor #" + actor +
+                                                 ", expected: " + BigInt(actorseq.prev_hash).toString()));
         }
 
         let signors = new Array();
@@ -298,15 +325,15 @@ class PBTX {
 
         let authorities = tx.getAuthoritiesList();
         if( authorities.length != signors.length ) {
-            return Promise.reject(Error("number of authorities is not equal to number of signors: " +
-                                        authorities.length + " vs. " + signors.length));
+            return Promise.reject(new PbtxFormatError("number of authorities is not equal to number of signors: " +
+                                                  authorities.length + " vs. " + signors.length));
         }
 
         for( let auth_index = 0; auth_index < signors.length; auth_index++ ) {
             let acc = signors[auth_index];
             let auth = authorities[auth_index];
             if( auth.getType() != pbtx_pb.KeyType['EOSIO_KEY'] ) {
-                return Promise.reject(Error("Unsupported key type in authority #" + auth_index + ": " + auth.getType()));
+                return Promise.reject(new PbtxFormatError("Unsupported key type in authority #" + auth_index + ": " + auth.getType()));
             }
 
             let signatures = auth.getSigsList();
@@ -320,7 +347,7 @@ class PBTX {
             });
 
             if( res.rows.length == 0 || res.rows[0].actor != acc ) {
-                return Promise.reject(Error("Unknown actor #" + acc + " in authority #" + auth_index));
+                return Promise.reject(new PbtxUnknownAccountError("Unknown actor #" + acc + " in authority #" + auth_index));
             }
 
             let perm = pbtx_pb.Permission.deserializeBinary(Buffer.from(res.rows[0].permission, 'hex'));
@@ -356,10 +383,10 @@ class PBTX {
             }
 
             if( weight_sum == 0 ) {
-                return Promise.reject(Error("Could not find a matching signature for actor " + acc));
+                return Promise.reject(new PbtxAuthorizationError("Could not find a matching signature for actor " + acc));
             }
             else if( weight_sum < perm.getThreshold() ) {
-                return Promise.reject(Error("Insufficient signatures for actor " + acc));
+                return Promise.reject(new PbtxAuthorizationError("Insufficient signatures for actor " + acc));
             }
         }
     }
