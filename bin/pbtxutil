@@ -110,16 +110,46 @@ program
 program
     .command('trx <networkid>')
     .requiredOption('--actor [value]', 'actor ID')
-    .requiredOption('--seqnum [value]', 'transaction sequence number')
-    .requiredOption('--prev [value]', 'previous transaction hash')
+    .option('--seqnum [value]', 'transaction sequence number')
+    .option('--prev [value]', 'previous transaction hash')
+    .option('--autoseq', 'automatically derive seqnum and prev')
     .requiredOption('--type [value]', 'transaction type')
     .requiredOption('--actorkey [value]', 'Actor private key')
     .requiredOption('--worker [value]', 'worker account name')
     .option('--content [value]', 'transaction content in hex')
     .option('--print', 'print the transaction in hex instead of sending it to blockchain')
     .description('Execute a PBTX transaction')
-    .action((networkid, cmdopts) => {
+    .action(async (networkid, cmdopts) => {
         const options = program.opts();
+        const api = get_api();
+
+        if( cmdopts.autoseq ) {
+            let seqres = await api.rpc.get_table_rows({
+                code: options.contract,
+                scope: BigInt(networkid).toString(),
+                table: 'actorseq',
+                lower_bound: cmdopts.actor,
+                limit: 1
+            });
+
+            if( seqres.rows.length == 0 || seqres.rows[0].actor != cmdopts.actor ) {
+                console.error("Unknown actor #" + cmdopts.actor);
+                process.exit(1);
+            }
+
+            cmdopts.seqnum = seqres.rows[0].seqnum + 1;
+            cmdopts.prev = seqres.rows[0].prev_hash;
+        }
+        else {
+            if( !cmdopts.seqnum ) {
+                console.error("Must specify both --seqnum option");
+                process.exit(1);
+            }
+            else if( cmdopts.seqnum != 1 && !cmdopts.prev ) {
+                console.error("Must specify both --prev option");
+                process.exit(1);
+            }
+        }
 
         let bodydata = {
             network_id: BigInt(networkid),
@@ -135,10 +165,10 @@ program
         const body = PBTX.makeTransactionBody(bodydata);
         if( !cmdopts.print ) {
             console.log('body_hash: ' + PBTX.getBodyHash(body).toString());
+            console.log('next_seq: ' + (bodydata.seqnum + 1));
         }
 
         const tx = PBTX.signTransactionBody(body, [cmdopts.actorkey]);
-        const api = get_api();
 
         if( cmdopts.print ) {
             console.log(Buffer.from(tx.serializeBinary()).toString('hex'));
