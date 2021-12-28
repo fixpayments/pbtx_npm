@@ -18,8 +18,7 @@
     },
     "main": "index.js",
     "files": [
-        "README.md",
-        "pbtx_pb.js"
+        "README.md"
     ],
     "dependencies": {
         "@proton/keosd-signature-provider": ">= 0.1.0",
