@@ -13,17 +13,20 @@
     "bin": {
         "pbtxutil": "./bin/pbtxutil"
     },
+    "directories": {
+        "lib": "./lib"
+    },
     "main": "index.js",
     "files": [
         "README.md",
         "pbtx_pb.js"
     ],
     "dependencies": {
-        "eosjs": ">=22.0.0",
         "@proton/keosd-signature-provider": ">= 0.1.0",
-        "elliptic": "6.5.4",
-        "google-protobuf": ">=3.17.3",
         "commander": ">=2.19.0",
+        "elliptic": "6.5.4",
+        "eosjs": ">=22.0.0",
+        "google-protobuf": ">=3.17.3",
         "node-fetch": ">= 2.6.0"
     }
 }
