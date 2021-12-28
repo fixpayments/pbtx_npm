@@ -19,7 +19,7 @@
 'use strict';
 
 const PBTX = require('../');
-const pbtx_pb = require('../pbtx_pb');
+const pbtx_pb = require('../lib/pbtx_pb');
 const program  = require('commander');
 const fetch = require('node-fetch');
 const fs = require("fs");

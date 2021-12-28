@@ -1,7 +1,7 @@
-all: pbtx_pb.js
+all: lib/pbtx_pb.js
 
-pbtx_pb.js: ../pbtx/pbtx.proto
-	protoc -I../pbtx pbtx.proto --js_out=import_style=commonjs,binary:.
+lib/pbtx_pb.js: ../pbtx/pbtx.proto
+	protoc -I../pbtx pbtx.proto --js_out=import_style=commonjs,binary:lib
 
 clean:
-	rm -rf pbtx_pb.js node_modules/
+	rm -rf lib/pbtx_pb.js node_modules/

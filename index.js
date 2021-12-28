@@ -16,7 +16,7 @@
 
 'use strict';
 
-const pbtx_pb = require('./pbtx_pb');
+const pbtx_pb = require('./lib/pbtx_pb');
 const EC = require('elliptic').ec;
 const { PrivateKey } = require('eosjs/dist/PrivateKey');
 const { PublicKey } = require('eosjs/dist/PublicKey');
