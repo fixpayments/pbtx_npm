@@ -200,14 +200,13 @@ class PBTX {
         return bodyhash;
     }
 
-    // gets TransactionBody object and array of private keys in string format
-    // returns Transaction object
-    static signTransactionBody(body, privateKeys) {
-        const serializedBody = body.serializeBinary();
-        const digest = defaultEc.hash().update(serializedBody).digest();
+    // takes a message in a Buffer and a ECC private keys in EOSIO text format
+    // returns pbtx.Authority object
+    static signData(data, privateKeys) {
+        const digest = defaultEc.hash().update(data).digest();
 
-        let tx = new pbtx_pb.Transaction();
-        tx.setBody(serializedBody);
+        let auth = new pbtx_pb.Authority();
+        auth.setType(pbtx_pb.KeyType.EOSIO_KEY);
 
         privateKeys.forEach( key => {
             const priv = PrivateKey.fromString(key);
@@ -217,14 +216,67 @@ class PBTX {
             buffer.push(signature.signature.type);
             buffer.pushArray(signature.signature.data);
 
-            let sig = new pbtx_pb.Authority();
-            sig.setType(pbtx_pb.KeyType.EOSIO_KEY);
-            sig.addSigs(buffer.asUint8Array());
+            auth.addSigs(buffer.asUint8Array());
+        });
 
-            tx.addAuthorities(sig);
+        return auth;
+    }
+
+    s
+    // gets TransactionBody object and array of private keys in string format
+    // creates a separate Authority object for each private key
+    // returns Transaction object
+    static signTransactionBody(body, privateKeys) {
+        const serializedBody = body.serializeBinary();
+        let tx = new pbtx_pb.Transaction();
+        tx.setBody(serializedBody);
+        privateKeys.forEach( key => {
+            let auth = this.signData(serializedBody, new Array(key));
+            tx.addAuthorities(auth);
         });
 
         return tx;
+    }
+
+
+    static verifyAuthority(data, permission, authority, verbose) {
+        let signatures = authority.getSigsList();
+        let keyweights = permission.getKeysList();
+        const digest = defaultEc.hash().update(data).digest();
+
+        let weight_sum = 0;
+        for( let sig_index = 0; sig_index < signatures.length; sig_index++ ) {
+            let sig_buf = signatures[sig_index];
+            let signature = new Signature({
+                type: sig_buf[0],
+                data: sig_buf.subarray(1)
+            }, defaultEc);
+
+            for( let key_index = 0; key_index < keyweights.length; key_index++ ) {
+                let keyweight = keyweights[key_index];
+                let key = keyweight.getKey();
+                let key_buf = key.getKeyBytes();
+                let pubkey = new PublicKey({
+                    type: key_buf[0],
+                    data: key_buf.subarray(1)
+                }, defaultEc);
+
+                if( signature.verify(digest, pubkey, false) ) {
+                    if( verbose ) {
+                        console.log("Signature #" + sig_index + " matched key: " + pubkey.toString());
+                    }
+                    weight_sum += keyweight.getWeight();
+                    break;
+                }
+            }
+        }
+
+        if( weight_sum == 0 ) {
+            throw new PbtxAuthorizationError("Could not find a matching signature for actor " + acc);
+        }
+        else if( weight_sum < permission.getThreshold() ) {
+            throw new PbtxAuthorizationError("Insufficient signatures for actor " + acc);
+        }
     }
 
 
@@ -282,7 +334,6 @@ class PBTX {
         let tx = pbtx_pb.Transaction.deserializeBinary(txbinary);
         let body_buf = tx.getBody();
         let body = pbtx_pb.TransactionBody.deserializeBinary(body_buf);
-        const body_digest = defaultEc.hash().update(body_buf).digest();
         let network_id = body.getNetworkId();
         let actor = body.getActor();
 
@@ -336,8 +387,6 @@ class PBTX {
                 return Promise.reject(new PbtxFormatError("Unsupported key type in authority #" + auth_index + ": " + auth.getType()));
             }
 
-            let signatures = auth.getSigsList();
-
             let res = await api.rpc.get_table_rows({
                 code: contract,
                 scope: network_id,
@@ -351,42 +400,12 @@ class PBTX {
             }
 
             let perm = pbtx_pb.Permission.deserializeBinary(Buffer.from(res.rows[0].permission, 'hex'));
-            let keyweights = perm.getKeysList();
 
-
-            let weight_sum = 0;
-            for( let sig_index = 0; sig_index < signatures.length; sig_index++ ) {
-                let sig_buf = signatures[sig_index];
-                let signature = new Signature({
-                    type: sig_buf[0],
-                    data: sig_buf.subarray(1)
-                }, defaultEc);
-
-                for( let key_index = 0; key_index < keyweights.length; key_index++ ) {
-                    let keyweight = keyweights[key_index];
-                    let key = keyweight.getKey();
-                    let key_buf = key.getKeyBytes();
-                    let pubkey = new PublicKey({
-                        type: key_buf[0],
-                        data: key_buf.subarray(1)
-                    }, defaultEc);
-
-                    if( signature.verify(body_digest, pubkey, false) ) {
-                        if( verbose ) {
-                            console.log("Signature #" + sig_index + " in authority #" + auth_index +
-                                        " matched key: " + pubkey.toString());
-                        }
-                        weight_sum += keyweight.getWeight();
-                        break;
-                    }
-                }
+            try {
+                this.verifyAuthority(body_buf, perm, auth, verbose);
             }
-
-            if( weight_sum == 0 ) {
-                return Promise.reject(new PbtxAuthorizationError("Could not find a matching signature for actor " + acc));
-            }
-            else if( weight_sum < perm.getThreshold() ) {
-                return Promise.reject(new PbtxAuthorizationError("Insufficient signatures for actor " + acc));
+            catch(e) {
+                return Promise.reject(e);
             }
         }
     }
