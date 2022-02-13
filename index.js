@@ -23,7 +23,8 @@ const { PublicKey } = require('eosjs/dist/PublicKey');
 const { Signature } = require('eosjs/dist/Signature');
 const { SerialBuffer } = require('eosjs/dist/eosjs-serialize');
 
-const defaultEc = new EC('secp256k1');
+const ecK1 = new EC('secp256k1');
+const ecR1 = new EC('p256');
 
 class PbtxFormatError extends Error {
   constructor(message) {
@@ -191,7 +192,7 @@ class PBTX {
     // transaction as prev_hash
     static getBodyHash(body) {
         const serializedBody = body.serializeBinary();
-        const digest = defaultEc.hash().update(serializedBody).digest();
+        const digest = ecK1.hash().update(serializedBody).digest();
 
         let bodyhash = BigInt(0);
         for( let i=0; i < 8; i++ ) {
@@ -203,7 +204,7 @@ class PBTX {
     // takes a message in a Buffer and a ECC private keys in EOSIO text format
     // returns pbtx.Authority object
     static signData(data, privateKeys) {
-        const digest = defaultEc.hash().update(data).digest();
+        const digest = ecK1.hash().update(data).digest();
 
         let auth = new pbtx_pb.Authority();
         auth.setType(pbtx_pb.KeyType.EOSIO_KEY);
@@ -222,7 +223,7 @@ class PBTX {
         return auth;
     }
 
-    s
+
     // gets TransactionBody object and array of private keys in string format
     // creates a separate Authority object for each private key
     // returns Transaction object
@@ -242,7 +243,7 @@ class PBTX {
     static verifyAuthority(data, permission, authority, verbose) {
         let signatures = authority.getSigsList();
         let keyweights = permission.getKeysList();
-        const digest = defaultEc.hash().update(data).digest();
+        const digest = ecK1.hash().update(data).digest();
 
         let weight_sum = 0;
         for( let sig_index = 0; sig_index < signatures.length; sig_index++ ) {
@@ -250,32 +251,34 @@ class PBTX {
             let signature = new Signature({
                 type: sig_buf[0],
                 data: sig_buf.subarray(1)
-            }, defaultEc);
+            }, sig_buf[0] == 1 ? ecR1 : ecK1);
 
             for( let key_index = 0; key_index < keyweights.length; key_index++ ) {
                 let keyweight = keyweights[key_index];
                 let key = keyweight.getKey();
                 let key_buf = key.getKeyBytes();
-                let pubkey = new PublicKey({
-                    type: key_buf[0],
-                    data: key_buf.subarray(1)
-                }, defaultEc);
-
-                if( signature.verify(digest, pubkey, false) ) {
-                    if( verbose ) {
-                        console.log("Signature #" + sig_index + " matched key: " + pubkey.toString());
+                if( key_buf[0] == sig_buf[0] ) { // key and signature curves should be the same
+                    let pubkey = new PublicKey({
+                        type: key_buf[0],
+                        data: key_buf.subarray(1)
+                    }, key_buf[0] == 1 ? ecR1 : ecK1);
+                    
+                    if( signature.verify(digest, pubkey, false) ) {
+                        if( verbose ) {
+                            console.log("Signature #" + sig_index + " matched key: " + pubkey.toString());
+                        }
+                        weight_sum += keyweight.getWeight();
+                        break;
                     }
-                    weight_sum += keyweight.getWeight();
-                    break;
                 }
             }
         }
 
         if( weight_sum == 0 ) {
-            throw new PbtxAuthorizationError("Could not find a matching signature for actor " + acc);
+            throw new PbtxAuthorizationError("Could not find a matching signature for actor " + permission.getActor());
         }
         else if( weight_sum < permission.getThreshold() ) {
-            throw new PbtxAuthorizationError("Insufficient signatures for actor " + acc);
+            throw new PbtxAuthorizationError("Insufficient signatures for actor " + permission.getActor());
         }
     }
 
