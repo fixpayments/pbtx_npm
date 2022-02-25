@@ -56,6 +56,32 @@ class PbtxAuthorizationError extends Error {
 
 
 class PBTX {
+
+    // takes a public key in EOS format and creates a Permission protobuf object
+    static publicKeyFromEOSKey(eoskey) {
+        let buffer = new SerialBuffer();
+        buffer.pushPublicKey(eoskey);
+        let pk = new pbtx_pb.PublicKey();
+        pk.setType(pbtx_pb.KeyType.EOSIO_KEY);
+        pk.setKeyBytes(buffer.asUint8Array());
+        return pk;
+    }
+
+    // takes pbtxPublicKey and returns an EOS key string
+    static EOSKeyFromPublicKey(public_key) {
+        let keybytes = public_key.getKeyBytes();
+        let pubkey = new PublicKey({
+            type: keybytes[0],
+            data: keybytes.subarray(1)
+        }, keybytes[0] == 1 ? ecR1 : ecK1);
+        return pubkey.toString();
+    }
+
+    // returns sha256 of data
+    static digest(data) {
+        return ecK1.hash().update(data).digest();
+    }
+
     // takes permission attributes
     // returns a Permission protobuf object
     static makePermission(data) {
@@ -91,15 +117,8 @@ class PBTX {
                 throw Error('key must be defined');
             }
 
-            let buffer = new SerialBuffer();
-            buffer.pushPublicKey(keyweight.key);
-
-            let pk = new pbtx_pb.PublicKey();
-            pk.setType(pbtx_pb.KeyType.EOSIO_KEY);
-            pk.setKeyBytes(buffer.asUint8Array());
-
             let kw = new pbtx_pb.KeyWeight();
-            kw.setKey(pk);
+            kw.setKey(this.publicKeyFromEOSKey(keyweight.key));
             kw.setWeight(keyweight.weight);
 
             perm.addKeys(kw);
@@ -192,7 +211,7 @@ class PBTX {
     // transaction as prev_hash
     static getBodyHash(body) {
         const serializedBody = body.serializeBinary();
-        const digest = ecK1.hash().update(serializedBody).digest();
+        const digest = this.digest(serializedBody);
 
         let bodyhash = BigInt(0);
         for( let i=0; i < 8; i++ ) {
@@ -204,7 +223,7 @@ class PBTX {
     // takes a message in a Buffer and a ECC private keys in EOSIO text format
     // returns pbtx.Authority object
     static signData(data, privateKeys) {
-        const digest = ecK1.hash().update(data).digest();
+        const digest = this.digest(data);
 
         let auth = new pbtx_pb.Authority();
         auth.setType(pbtx_pb.KeyType.EOSIO_KEY);
@@ -239,37 +258,41 @@ class PBTX {
         return tx;
     }
 
+    // takes sha256 hash of data, pbtx.PublicKey object, and signature bytes
+    static verifySignature(digest, public_key, sigbytes) {
+        let signature = new Signature({
+            type: sigbytes[0],
+            data: sigbytes.subarray(1)
+        }, sigbytes[0] == 1 ? ecR1 : ecK1);
+
+        let keybytes = public_key.getKeyBytes();
+        if( keybytes[0] == sigbytes[0] ) { // key and signature curves should be the same
+            let pubkey = new PublicKey({
+                type: keybytes[0],
+                data: keybytes.subarray(1)
+            }, keybytes[0] == 1 ? ecR1 : ecK1);
+            return( signature.verify(digest, pubkey, false) );
+        }
+        return false;
+    }
 
     static verifyAuthority(data, permission, authority, verbose) {
         let signatures = authority.getSigsList();
         let keyweights = permission.getKeysList();
-        const digest = ecK1.hash().update(data).digest();
+        const digest = this.digest(data);
 
         let weight_sum = 0;
         for( let sig_index = 0; sig_index < signatures.length; sig_index++ ) {
-            let sig_buf = signatures[sig_index];
-            let signature = new Signature({
-                type: sig_buf[0],
-                data: sig_buf.subarray(1)
-            }, sig_buf[0] == 1 ? ecR1 : ecK1);
-
+            let sigbytes = signatures[sig_index];
             for( let key_index = 0; key_index < keyweights.length; key_index++ ) {
                 let keyweight = keyweights[key_index];
-                let key = keyweight.getKey();
-                let key_buf = key.getKeyBytes();
-                if( key_buf[0] == sig_buf[0] ) { // key and signature curves should be the same
-                    let pubkey = new PublicKey({
-                        type: key_buf[0],
-                        data: key_buf.subarray(1)
-                    }, key_buf[0] == 1 ? ecR1 : ecK1);
-                    
-                    if( signature.verify(digest, pubkey, false) ) {
-                        if( verbose ) {
-                            console.log("Signature #" + sig_index + " matched key: " + pubkey.toString());
-                        }
-                        weight_sum += keyweight.getWeight();
-                        break;
+                let public_key = keyweight.getKey();
+                if( this.verifySignature(digest, public_key, sigbytes) ) {
+                    if( verbose ) {
+                        console.log("Signature #" + sig_index + " matched key: " + this.EOSKeyFromPublicKey(public_key));
                     }
+                    weight_sum += keyweight.getWeight();
+                    break;
                 }
             }
         }

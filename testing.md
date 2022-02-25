@@ -7,6 +7,62 @@ which is only used for conveninence. The PBTX protocol itself does not
 depend on textual representation of the keys. "cleos" utility is part
 of EOSIO software suite.
 
+Key and signature primitives:
+```
+###################
+# k1 key
+cleos create key --to-console 
+Private key: 5KgBKkXDZf6u4RrRwQARZMTNNU7E5bnKm5ELrxnqXGWVQ1DtRE7
+Public key: EOS7hBPNA4ZhMJ32kFW7uSQCKuBsYFWSivfr6kGirJTLhysCKLU8Z
+
+# pbtx.PublicKey object
+./bin/pbtxdata eos2pbtxkey EOS7hBPNA4ZhMJ32kFW7uSQCKuBsYFWSivfr6kGirJTLhysCKLU8Z
+
+12220003716875cd7ebcb45ae275f0f638f5c94132eb18a892bed1153ad72cce302afab6
+
+# pbtx.PublicKey to EOS key conversion
+./bin/pbtxdata pbtxkey2eos 12220003716875cd7ebcb45ae275f0f638f5c94132eb18a892bed1153ad72cce302afab6
+
+PUB_K1_7hBPNA4ZhMJ32kFW7uSQCKuBsYFWSivfr6kGirJTLhysB4wYis
+
+# sign data
+./bin/pbtxdata mksig --data=0102030405060708090a0b0c0d0e0f --privkey=5KgBKkXDZf6u4RrRwQARZMTNNU7E5bnKm5ELrxnqXGWVQ1DtRE7
+
+00207fe441d2d1215f57f87256843877d07d0d5a34a9b61d3985bc934867441c93813fb37264303895ca2614105d4296f27518dfa601f3536c62a859af27b1de75de
+
+# verify the signatute
+./bin/pbtxdata checksig --data=0102030405060708090a0b0c0d0e0f --key=12220003716875cd7ebcb45ae275f0f638f5c94132eb18a892bed1153ad72cce302afab6 --sig=00207fe441d2d1215f57f87256843877d07d0d5a34a9b61d3985bc934867441c93813fb37264303895ca2614105d4296f27518dfa601f3536c62a859af27b1de75de
+
+Matched
+
+
+###################
+# r1 key
+cleos create key --to-console --r1
+Private key: PVT_R1_2B17RwGod27jJFMmDZdfYSKTjLsjiUvbEFLDTtDiK5rs8SBrh4
+Public key: PUB_R1_4ucLsQSE3KXMqDDt1kUQodBKwLrwE8arGvWvitdxSv9n8ej2y7
+
+# pbtx.PublicKey object
+./bin/pbtxdata eos2pbtxkey PUB_R1_4ucLsQSE3KXMqDDt1kUQodBKwLrwE8arGvWvitdxSv9n8ej2y7
+
+12220102028b54b9667baef61bf38c666140b92ea7e529d933cb57cc09ab60abc4c55330
+
+# pbtx.PublicKey to EOS key conversion
+./bin/pbtxdata pbtxkey2eos 12220102028b54b9667baef61bf38c666140b92ea7e529d933cb57cc09ab60abc4c55330
+
+PUB_R1_4ucLsQSE3KXMqDDt1kUQodBKwLrwE8arGvWvitdxSv9n8ej2y7
+
+# sign data
+./bin/pbtxdata mksig --data=0102030405060708090a0b0c0d0e0f --privkey=PVT_R1_2B17RwGod27jJFMmDZdfYSKTjLsjiUvbEFLDTtDiK5rs8SBrh4
+
+0120527fda9a6ab5bfa339d2d9a837b3e2f587e5b09d77cb2ef8df779d63f2a7d2075455c4fd330460e1303a06cfb70089c7613b2602dc81f59815a17b2770c47030
+
+# verify the signatute
+./bin/pbtxdata checksig --data=0102030405060708090a0b0c0d0e0f --key=12220102028b54b9667baef61bf38c666140b92ea7e529d933cb57cc09ab60abc4c55330 --sig=0120527fda9a6ab5bfa339d2d9a837b3e2f587e5b09d77cb2ef8df779d63f2a7d2075455c4fd330460e1303a06cfb70089c7613b2602dc81f59815a17b2770c47030
+
+Matched
+```
+
 
 ```
 # Actor A: k1 key

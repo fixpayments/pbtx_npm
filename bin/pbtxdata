@@ -24,13 +24,69 @@ const program  = require('commander');
 
 
 program
+    .command('eos2pbtxkey <eoskey>')
+    .description('generate and print pbtx.PublicKey object from EOS public key')
+    .action((eoskey) => {
+        let public_key = PBTX.publicKeyFromEOSKey(eoskey);
+        console.log(Buffer.from(public_key.serializeBinary()).toString('hex'));
+    });
+
+
+program
+    .command('pbtxkey2eos <pbtxkey>')
+    .description('read pbtx.PublicKey message and ptint the EOS public key')
+    .action((pbtxkey) => {
+        let key = pbtx_pb.PublicKey.deserializeBinary(Buffer.from(pbtxkey, 'hex'));
+        console.log(PBTX.EOSKeyFromPublicKey(key));
+    });
+
+
+program
+    .command('mksig')
+    .requiredOption('--data [value]', 'original data in hex encoding')
+    .requiredOption('--privkey [value...]', 'Actor private key(s)')
+    .description('Sign the binary data and print raw ECC signature')
+    .action(async (cmdopts) => {
+        const options = program.opts();
+        const data = Buffer.from(cmdopts.data, 'hex');
+        const auth = PBTX.signData(data, cmdopts.privkey);
+        const signatures = auth.getSigsList();
+        console.log(Buffer.from(signatures[0]).toString('hex'));
+    });
+
+program
+    .command('checksig')
+    .requiredOption('--data [value]', 'original data in hex encoding')
+    .requiredOption('--key [value]', 'pbtx.PublicKey object in hex encoding')
+    .requiredOption('--sig [value]', 'raw ECC signature in hex encoding')
+    .description('Take original data, pbtx.PublicKey object, and validate the signature')
+    .action((cmdopts) => {
+        const options = program.opts();
+        const data = Buffer.from(cmdopts.data, 'hex');
+        const key = pbtx_pb.PublicKey.deserializeBinary(Buffer.from(cmdopts.key, 'hex'));
+        const sig = Buffer.from(cmdopts.sig, 'hex');
+        try {
+            const digest = PBTX.digest(data);
+            if( PBTX.verifySignature(digest, key, sig) ) {
+                console.log("Matched");
+            }
+            else {
+                console.error("The signature does NOT match the key");
+            }
+        }
+        catch(e) {
+            console.error(e.message);
+        }
+    });
+
+
+program
     .command('perm <jsdata>')
     .description('generate and print pbtx.Permission object')
     .action((jsdata) => {
         let perm = PBTX.makePermission(JSON.parse(jsdata));
         console.log(Buffer.from(perm.serializeBinary()).toString('hex'));
     });
-
 
 
 program
