@@ -58,6 +58,14 @@ class PbtxAuthorizationError extends Error {
 class PBTX {
 
     // takes a public key in EOS format and creates a Permission protobuf object
+    static publicKeyFromHexKey(hexkey) {
+        let pk = new pbtx_pb.PublicKey();
+        pk.setType(pbtx_pb.KeyType.EOSIO_KEY);
+        pk.setKeyBytes(new Buffer.from(hexkey,'hex'));
+        return pk;
+    }
+
+    // takes a public key in EOS format and creates a Permission protobuf object
     static publicKeyFromEOSKey(eoskey) {
         let buffer = new SerialBuffer();
         buffer.pushPublicKey(eoskey);
@@ -118,7 +126,7 @@ class PBTX {
             }
 
             let kw = new pbtx_pb.KeyWeight();
-            kw.setKey(this.publicKeyFromEOSKey(keyweight.key));
+            kw.setKey(this.publicKeyFromHexKey(keyweight.key));
             kw.setWeight(keyweight.weight);
 
             perm.addKeys(kw);
@@ -265,13 +273,13 @@ class PBTX {
             data: sigbytes.subarray(1)
         }, sigbytes[0] == 1 ? ecR1 : ecK1);
 
-        let keybytes = public_key.getKeyBytes();
+        let keybytes = public_key;
         if( keybytes[0] == sigbytes[0] ) { // key and signature curves should be the same
             let pubkey = new PublicKey({
                 type: keybytes[0],
                 data: keybytes.subarray(1)
             }, keybytes[0] == 1 ? ecR1 : ecK1);
-            return( signature.verify(digest, pubkey, false) );
+            return( signature.verify(digest, pubkey, false, 'hex') );
         }
         return false;
     }
@@ -332,8 +340,9 @@ class PBTX {
 
 
     static async sendTransaction(tx, api, contract, worker) {
-        // console.log(Buffer.from(tx.serializeBinary()).toString('hex'));
-        return api.transact(
+        console.log('I: calling sendTransaction')
+        console.log(tx);
+        return await api.transact(
             {
                 actions:
                 [
@@ -345,7 +354,7 @@ class PBTX {
                             permission: 'active'} ],
                         data: {
                             worker: worker,
-                            trx_input: tx.serializeBinary()
+                            trx_input: tx
                         },
                     }
                 ]
