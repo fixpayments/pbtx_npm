@@ -84,7 +84,22 @@ program
     .command('perm <jsdata>')
     .description('generate and print pbtx.Permission object')
     .action((jsdata) => {
-        let perm = PBTX.makePermission(JSON.parse(jsdata));
+        let jsDataObject = JSON.parse(jsdata)
+        let permissionData = {
+            actor: jsDataObject.actor,
+            threshold: jsDataObject.threshold,
+            keys: jsDataObject.keys.map(weightedKey => {
+                let publicKey = PBTX.publicKeyFromEOSKey(weightedKey.key);
+                return {
+                    key: {
+                        type: publicKey.getType,
+                        key_bytes: publicKey.getKeyBytes()
+                    },
+                    weight: weightedKey.weight
+                }
+            })
+        }
+        let perm = PBTX.makePermissionObjectFromPermissionData(permissionData);
         console.log(Buffer.from(perm.serializeBinary()).toString('hex'));
     });
 
