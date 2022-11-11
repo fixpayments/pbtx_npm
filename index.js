@@ -90,8 +90,10 @@ class PBTX {
         return ecK1.hash().update(data).digest();
     }
 
-    // takes permission attributes
-    // returns a Permission protobuf object
+    /**
+     * Takes permission attributes and returns a Permission protobuf object.
+     * @deprecated Use makePermissionObjectFromPermissionData instead.
+     */
     static makePermission(data) {
         let actor = BigInt(data.actor);
 
@@ -130,6 +132,56 @@ class PBTX {
             kw.setWeight(keyweight.weight);
 
             perm.addKeys(kw);
+        });
+
+        return perm;
+    }
+
+    // takes permission attributes
+    // returns a Permission protobuf object
+    // TODO mcicu: replace usage of makePermission(data) method above with this one
+    static makePermissionObjectFromPermissionData(data) {
+        let actor = BigInt(data.actor);
+
+        if( !Number.isInteger(data.threshold) ) {
+            throw Error('threshold must be an integer');
+        }
+
+        if( data.threshold == 0 ) {
+            throw Error('threshold must be a positive integer');
+        }
+
+        if( !Array.isArray(data.keys) ) {
+            throw Error('keys must be an array');
+        }
+
+
+        let perm = new pbtx_pb.Permission();
+        perm.setActor(actor.toString());
+        perm.setThreshold(data.threshold);
+
+        data.keys.forEach( keyweight => {
+            if( !Number.isInteger(keyweight.weight) ) {
+                throw Error('key weight must be an integer');
+            }
+
+            if( keyweight.weight == 0 ) {
+                throw Error('key weight must be a positive integer');
+            }
+
+            if( keyweight.key == null ) {
+                throw Error('key must be defined');
+            }
+
+            let publicKey = new pbtx_pb.PublicKey();
+            publicKey.setType(pbtx_pb.KeyType[keyweight.key.type]);
+            publicKey.setKeyBytes(keyweight.key.key_bytes);
+
+            let weightedKey = new pbtx_pb.KeyWeight();
+            weightedKey.setKey(publicKey);
+            weightedKey.setWeight(keyweight.weight);
+
+            perm.addKeys(weightedKey);
         });
 
         return perm;
@@ -390,12 +442,12 @@ class PBTX {
         let actorseq = seqres.rows[0];
         if( body.getSeqnum() != actorseq.seqnum + 1 ) {
             return Promise.reject(new PbtxTxSeqError("Invalid sequence number " + body.getSeqnum() + " for actor #" + actor +
-                                                 ", expected: " + (actorseq.seqnum + 1)));
+                ", expected: " + (actorseq.seqnum + 1)));
         }
 
         if( BigInt(body.getPrevHash()) != BigInt(actorseq.prev_hash) ) {
             return Promise.reject(new PbtxTxSeqError("Invalid prev_hash " + body.getPrevHash() + " for actor #" + actor +
-                                                 ", expected: " + BigInt(actorseq.prev_hash).toString()));
+                ", expected: " + BigInt(actorseq.prev_hash).toString()));
         }
 
         let signors = new Array();
