@@ -40,7 +40,23 @@ program
     .action((networkid, jsdata, cmdopts) => {
         const options = program.opts();
 
-        let perm = PBTX.makePermission(JSON.parse(jsdata));
+        let jsDataObject = JSON.parse(jsdata)
+        let permissionData = {
+            actor: jsDataObject.actor,
+            threshold: jsDataObject.threshold,
+            keys: jsDataObject.keys.map(weightedKey => {
+                let publicKey = PBTX.publicKeyFromEOSKey(weightedKey.key);
+                return {
+                    key: {
+                        type: publicKey.getType,
+                        key_bytes: publicKey.getKeyBytes()
+                    },
+                    weight: weightedKey.weight
+                }
+            })
+        }
+        let perm = PBTX.makePermissionObjectFromPermissionData(permissionData);
+
         const api = get_api();
 
         PBTX.setPermission(networkid, perm, api, options.contract, cmdopts.admin)
