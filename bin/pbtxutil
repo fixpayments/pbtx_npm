@@ -184,10 +184,10 @@ program
             console.log('next_seq: ' + (bodydata.seqnum + 1));
         }
 
-        const tx = PBTX.signTransactionBody(body, [cmdopts.actorkey]);
+        const tx = PBTX.signTransactionBody(body, [cmdopts.actorkey]).serializeBinary();
 
         if( cmdopts.print ) {
-            console.log(Buffer.from(tx.serializeBinary()).toString('hex'));
+            console.log(Buffer.from(tx).toString('hex'));
         }
         else {
             PBTX.sendTransaction(tx, api, options.contract, cmdopts.worker)
