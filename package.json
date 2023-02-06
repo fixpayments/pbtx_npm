@@ -24,7 +24,7 @@
         "lib/"
     ],
     "dependencies": {
-        "@proton/keosd-signature-provider": ">= 0.1.0",
+        "@proton/keosd-signature-provider": ">= 0.1.3",
         "commander": ">=2.19.0",
         "elliptic": "6.5.4",
         "eosjs": ">=22.0.0",
