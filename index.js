@@ -75,6 +75,14 @@ class PBTX {
         return pk;
     }
 
+
+    static permissionObjectFromHexBinary(hexperm) {
+        const buffer = new Buffer.from(hexperm, 'hex')
+        const permissionInstance = pbtx_pb.Permission.deserializeBinary(buffer)
+        const permissionObject = this.permissionToObject(permissionInstance)
+        return permissionObject;
+    }
+
     // takes pbtxPublicKey and returns an EOS key string
     static EOSKeyFromPublicKey(public_key) {
         let keybytes = public_key.getKeyBytes();
