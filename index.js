@@ -75,6 +75,13 @@ class PBTX {
         return pk;
     }
 
+    static permissionObjectFromHexBinary(hexperm) {
+        const buffer = new Buffer.from(hexperm, 'hex')
+        const permissionInstance = pbtx_pb.Permission.deserializeBinary(buffer)
+        const permissionObject = this.permissionToObject(permissionInstance)
+        return permissionObject;
+    }
+
     // takes pbtxPublicKey and returns an EOS key string
     static EOSKeyFromPublicKey(public_key) {
         let keybytes = public_key.getKeyBytes();
@@ -325,7 +332,7 @@ class PBTX {
             data: sigbytes.subarray(1)
         }, sigbytes[0] == 1 ? ecR1 : ecK1);
 
-        let keybytes = public_key;
+        let keybytes = public_key.getKeyBytes();
         if( keybytes[0] == sigbytes[0] ) { // key and signature curves should be the same
             let pubkey = new PublicKey({
                 type: keybytes[0],
@@ -392,8 +399,6 @@ class PBTX {
 
 
     static async sendTransaction(tx, api, contract, worker) {
-        console.log('I: calling sendTransaction')
-        console.log(tx);
         return await api.transact(
             {
                 actions:
@@ -410,6 +415,30 @@ class PBTX {
                         },
                     }
                 ]
+            },
+            {
+                blocksBehind: 100,
+                expireSeconds: 3600
+            });
+    }
+
+    static async sendTransactions(txs, api, contract, worker) {
+        return await api.transact(
+            {
+                actions: txs.map(tx => {
+                    return {
+                        account: contract,
+                        name: 'exectrx',
+                        authorization: [{
+                            actor: worker,
+                            permission: 'active'
+                        }],
+                        data: {
+                            worker: worker,
+                            trx_input: tx
+                        },
+                    }
+                })
             },
             {
                 blocksBehind: 100,
