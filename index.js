@@ -332,7 +332,7 @@ class PBTX {
             data: sigbytes.subarray(1)
         }, sigbytes[0] == 1 ? ecR1 : ecK1);
 
-        let keybytes = public_key.getKeyBytes();
+        let keybytes = public_key;
         if( keybytes[0] == sigbytes[0] ) { // key and signature curves should be the same
             let pubkey = new PublicKey({
                 type: keybytes[0],
